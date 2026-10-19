@@ -1,0 +1,60 @@
+# 01.spring-backend-v1.0 Deployment
+# - REST API 서버(Spring Boot)를 k8s에 배포하기 위한 정의
+# - image 값은 docker-push.sh로 올린 이미지 주소로 바꿔서 사용한다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '8080'
+    prometheus.io/path: '/actuator/prometheus'
+    update: ebc4ed88
+  name: sk090-myfirst-api-server
+  namespace: class-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sk090-myfirst-api-server
+  template:
+    metadata:
+      labels:
+        app: sk090-myfirst-api-server
+    spec:
+      # SIGTERM 전달 후 강제 종료(SIGKILL)까지 대기하는 최대 시간
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: myfirst-api-server
+          image: skala-registry.skala-us.com/class-3/sk090-webserver:1.0.buildkit-pod
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "local"
+          # 준비(readiness)가 끝나기 전에는 Service가 트래픽을 보내지 않는다.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 5
+            periodSeconds: 10
+          # 살아있는지(liveness) 계속 실패하면 컨테이너를 재시작한다.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 5
+            periodSeconds: 10
+          # ---- createcm.sh로 만든 ConfigMap(application-prod.yaml)을 마운트하려면 아래 주석을 해제한다. ----
+          # volumeMounts:
+          #   - name: config-volume
+          #     mountPath: /app/config
+      # volumes:
+      #   - name: config-volume
+      #     configMap:
+      #       name: sk090-backend-configmap

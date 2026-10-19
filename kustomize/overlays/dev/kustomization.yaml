@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: class-3
+
+resources:
+- ../../base
+- configmap.yaml
+
+patches:
+- path: patch-deployment.yaml
+  target:
+    kind: Deployment
+    name: sk090-myfirst-api-server
+
+# 이미지 tag만 갱신하고 싶을 때 (standalone kustomize CLI 필요):
+#   cd kustomize/dev && kustomize edit set image \
+#     skala-registry.skala-us.com/class-3/sk090-webserver=skala-registry.skala-us.com/class-3/sk090-webserver:<NEW_TAG>
+images:
+- name: skala-registry.skala-us.com/class-3/sk090-webserver
+  newTag: "1.0"

@@ -1,0 +1,129 @@
+apiVersion: v1
+data:
+  application-prod.yaml: |
+    server:
+      port: 8080
+
+    developer:
+      owner:
+        name: skala
+        role: kubernetes
+        level: high
+      team:
+        position: "5th floor"
+        detail: class-0
+
+    # H2 설정
+    spring:
+      datasource:
+        url: jdbc:h2:mem:testdb
+        driver-class-name: org.h2.Driver
+        username: sa
+        password:
+      h2:
+        console:
+          enabled: true
+          path: /h2-console
+      jpa:
+        hibernate:
+          ddl-auto: create-drop
+        show-sql: true
+        defer-datasource-initialization: true
+      sql:
+        init:
+          mode: always
+kind: ConfigMap
+metadata:
+  name: skala-backend-configmap
+  namespace: class-0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    skala.io/owner: skala
+    skala.io/registry: skala-registry.skala-ai.com
+  labels:
+    skala.io/component: skala-devops
+    skala.io/managed-by: class-0-skala
+  name: skala-myfirst-api-server
+  namespace: class-0
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: mgmt
+    port: 8081
+    targetPort: 8081
+  selector:
+    app: skala-myfirst-api-server
+    skala.io/component: skala-devops
+    skala.io/managed-by: class-0-skala
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    prometheus.io/path: /actuator/prometheus
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+    skala.io/owner: skala
+    skala.io/registry: skala-registry.skala-ai.com
+    update: e773ddf4
+  labels:
+    skala.io/component: skala-devops
+    skala.io/managed-by: class-0-skala
+  name: skala-myfirst-api-server
+  namespace: class-0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: skala-myfirst-api-server
+      skala.io/component: skala-devops
+      skala.io/managed-by: class-0-skala
+  template:
+    metadata:
+      annotations:
+        skala.io/owner: skala
+        skala.io/registry: skala-registry.skala-ai.com
+      labels:
+        app: skala-myfirst-api-server
+        skala.io/component: skala-devops
+        skala.io/managed-by: class-0-skala
+    spec:
+      containers:
+      - env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: prod
+        image: skala-registry.skala-ai.com/class-0/skala-webserver:1.0
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        name: myfirst-api-server
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /app/config
+          name: config-volume
+      terminationGracePeriodSeconds: 20
+      volumes:
+      - configMap:
+          name: skala-backend-configmap
+        name: config-volume

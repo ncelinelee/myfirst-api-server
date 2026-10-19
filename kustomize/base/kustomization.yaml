@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: class-3
+
+labels:
+  - pairs:
+      skala.io/component: skala-devops
+      skala.io/managed-by: class-3-sk090
+    includeSelectors: false
+
+commonAnnotations:
+  skala.io/owner: sk090
+  skala.io/registry: skala-registry.skala-us.com
+
+resources:
+  - deployment.yaml
+  - service.yaml
