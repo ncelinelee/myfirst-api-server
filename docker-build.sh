@@ -1,13 +1,8 @@
-#!/bin/bash
-USER_NAME=${STUDENT_NUM}
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+USER_NAME="${STUDENT_NUM:-local}"
 IMAGE_NAME="webserver"
 VERSION="1.0"
-#IS_CACHE="--no-cache"
-
-mvn clean install -DskipTests
-# Docker 이미지 빌드
-docker buildx build \
-  --tag ${USER_NAME}-${IMAGE_NAME}:${VERSION} \
-  --file Dockerfile \
-  --platform linux/amd64,linux/arm64 \
-  ${IS_CACHE} .
+./mvnw --batch-mode verify
+docker build --tag "${USER_NAME}-${IMAGE_NAME}:${VERSION}" --file Dockerfile .

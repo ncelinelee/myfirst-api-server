@@ -58,6 +58,9 @@ public class OrderService {
     // 주문 생성
     @Transactional
     public Order createOrder(Long productId, Long userId, int quantity, String address) {
+        if (quantity < 1) {
+            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
+        }
         // 1. 상품과 사용자 조회
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 상품입니다. id=" + productId));
@@ -73,7 +76,11 @@ public class OrderService {
 
         // 3. 결제 정보 생성 (결제 대기 상태)
         Payment payment = new Payment();
-        payment.setAmount(product.getPrice() * quantity);
+        try {
+            payment.setAmount(Math.multiplyExact(product.getPrice(), quantity));
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("주문 금액이 지원 범위를 초과했습니다.", exception);
+        }
         payment.setStatus(PaymentStatus.PENDING);
 
         // 4. 배송 정보 생성 (배송 대기 상태)

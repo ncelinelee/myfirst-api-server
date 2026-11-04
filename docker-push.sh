@@ -1,21 +1,13 @@
-#!/bin/bash
-
-USER_NAME=${STUDENT_NUM}
-IMAGE_NAME="webserver"
-VERSION="1.0"
-PROJECT_NAME=$CLASS_NAME
-
-DOCKER_REGISTRY=${DOCKER_REGISTRY}
-
-
-# 1. Docker 레지스트리에 로그인 (옵션: 이 스크립트를 실행하기 전에 미리 로그인해두어도 됩니다)
-echo ${DOCKER_REGISTRY_PASSWORD} | docker login ${DOCKER_REGISTRY} \
-	-u ${DOCKER_REGISTRY_USER}  --password-stdin \
-   	|| { echo "Docker 로그인 실패"; exit 1; }
-
-# 2. harbor 로 push 하기 위해 tag 추가
-docker tag  ${USER_NAME}-${IMAGE_NAME}:${VERSION} ${DOCKER_REGISTRY}/${PROJECT_NAME}/${USER_NAME}-${IMAGE_NAME}:${VERSION}
-
-
-# Docker 이미지 푸시
-docker push ${DOCKER_REGISTRY}/${PROJECT_NAME}/${USER_NAME}-${IMAGE_NAME}:${VERSION}
+#!/usr/bin/env bash
+set -euo pipefail
+: "${STUDENT_NUM:?STUDENT_NUM is required}"
+: "${CLASS_NAME:?CLASS_NAME is required}"
+: "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required}"
+: "${DOCKER_REGISTRY_USER:?DOCKER_REGISTRY_USER is required}"
+: "${DOCKER_REGISTRY_PASSWORD:?DOCKER_REGISTRY_PASSWORD is required}"
+LOCAL_IMAGE="${STUDENT_NUM}-webserver:1.0"
+REMOTE_IMAGE="${DOCKER_REGISTRY}/${CLASS_NAME}/${LOCAL_IMAGE}"
+printf '%s' "$DOCKER_REGISTRY_PASSWORD" | docker login "$DOCKER_REGISTRY" \
+  --username "$DOCKER_REGISTRY_USER" --password-stdin
+docker tag "$LOCAL_IMAGE" "$REMOTE_IMAGE"
+docker push "$REMOTE_IMAGE"

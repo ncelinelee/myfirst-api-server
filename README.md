@@ -1,52 +1,96 @@
-# 01.spring-backend-v1.0
+# Spring 주문 API — JPA·트랜잭션 학습
 
-## 이 코드는 무엇을 위한 실습인가?
-Spring Boot(JPA + H2)로 만든 **REST API 전용 백엔드**입니다. 사용자(User)·상품(Product)·주문(Order)·결제(Payment)·배송(Delivery) 도메인을 다루며, JPA 연관관계(`@ManyToOne`, `@OneToOne`), 상태 전이(Enum), Actuator/Prometheus를 이용한 Kubernetes 헬스체크·모니터링을 실습합니다.
+사용자·상품·주문·결제·배송의 관계를 구현하고 주문 생성과 재고 차감의 원자성을 확인하는 Spring Boot 학습 프로젝트입니다. AI·데이터 분석 포트폴리오의 보조 자료로, API·데이터 저장·배포 기초를 보여줍니다.
 
-> 원래 이 프로젝트에는 Thymeleaf 화면(View Controller + templates)도 함께 있었지만, **화면은 [`03.frontend`](../03.frontend)로 분리**했습니다. 03.frontend는 정적 HTML/CSS/JS로 만든 별도 프로젝트이며, 브라우저의 JavaScript가 이 프로젝트(01)의 REST API를 호출해서 화면을 그립니다.
+## 출처와 작업 범위
 
-## 이 디렉토리 기준 구조/파일 설명
-- `src/main/java/.../controller/`: REST API 컨트롤러 (`UserController`, `ProductController`, `OrderController`, `PaymentController`, `DeliveryController`)
-- `src/main/java/.../domain/`: JPA 엔티티 및 상태 Enum
-- `src/main/java/.../dto/`: API 요청/응답 DTO
-- `src/main/java/.../service/`, `repository/`: 비즈니스 로직과 데이터 접근 계층
-- `src/main/resources/application*.yaml`: 프로필별 설정 (H2 DB, Actuator, Springdoc 등)
-- `Dockerfile`, `docker-build.sh`, `docker-push.sh`: 컨테이너 이미지 빌드/푸시
-- `k8s/`: Kubernetes 배포용 Deployment, Service (Ingress는 없음 — 외부 진입점은 03.frontend에만 둔다)
-- `실습-가이드.md`: 주문/결제/배송 기능을 직접 구현해보는 실습 가이드
+기존 [SKALA `01.spring-backend-v1.0` 실습 코드](https://github.com/himang10/skala-devops/tree/master/01.spring-backend-v1.0)에 기반합니다. 원본의 전체 도메인·Kubernetes 구성을 독자 설계한 결과로 소개하지 않습니다. 공개 최초 버전은 2026-10이며, 2026-11 후속 정리에서는 아래 변경을 추가했습니다.
 
-## 로컬 실행
+- 주문 성공·재고 부족·수량 검증·금액 초과·상태 전이·동시 주문·HTTP 응답 통합 테스트
+- 서비스 경계에서 0·음수 수량 방지, 정수 금액 계산의 초과 오류 시 트랜잭션 롤백
+- 주문 생성 `201`, 삭제 `204`, 없는 주문 조회 `404`, 잘못된 입력 `400`, 재고·버전 충돌 `409`
+- 실행 안내·컨테이너 빌드 스크립트·실제 배포 파일명의 불일치 수정
+- 빌드 캐시 Git 추적 제외와 GitHub Actions 테스트 추가
+
+기존 코드 내 세부 기능별 최초 작성자·개인 기여율은 현재 커밋만으로 확정하지 않습니다.
+
+## 실행
+
+Java 21을 사용합니다. 빌드·검증의 기준은 **Maven Wrapper**입니다. 함께 남아 있는 `build.gradle`은 수업 참고 구성입니다.
+
 ```bash
+git clone https://github.com/ncelinelee/myfirst-api-server.git
+cd myfirst-api-server
+./mvnw --batch-mode verify
 ./mvnw spring-boot:run
 ```
-- 기본 포트: `8080`
-- Swagger UI: http://localhost:8080/swagger-ui.html
-- H2 콘솔: http://localhost:8080/h2-console
 
-## 제공하는 REST API
-| 리소스 | 경로 |
-|---|---|
+기본 `local` 프로필은 메모리 H2와 예제 데이터를 사용합니다. 재시작하면 데이터가 초기화됩니다.
+
+- 화면: http://localhost:8080/ 및 http://localhost:8080/view/orders
+- Swagger: http://localhost:8080/swagger-ui.html
+- H2: http://localhost:8080/h2-console
+- Health: http://localhost:8080/actuator/health
+
+**현재 저장소에는 REST API와 Thymeleaf 화면이 함께 있습니다.** 별도의 `03.frontend` 저장소가 필요하지 않습니다.
+
+## 주문 흐름
+
+```text
+요청 검증 → 상품·사용자 조회 → 재고 확인·차감
+         → 결제·배송 생성 → 주문 저장 → 하나의 트랜잭션으로 커밋
+```
+
+`Product.@Version`으로 같은 재고 버전의 충돌을 감지합니다. 동시 주문 테스트는 두 트랜잭션이 마지막 재고를 함께 읽도록 동기화한 뒤, 한 건만 커밋되고 주문·결제·배송이 한 세트만 남는지 검사합니다. 충돌 요청은 `409`로 반환하며 자동 재시도는 하지 않습니다.
+
+주문 상태는 주문 완료 → 결제 대기 → 결제 완료 → 배송 대기 → 배송 완료 순입니다. 결제는 실제 결제대행사 호출이 아닌 상태 전이 실습입니다.
+
+## API
+
+| 대상 | 경로 |
+| --- | --- |
 | 사용자 | `GET/POST /api/users`, `GET/PUT/DELETE /api/users/{id}` |
-| 상품 | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/{id}` 외 상태별/사용자별 조회 |
-| 주문 | `GET/POST /api/orders`, `GET/DELETE /api/orders/{id}`, `POST /api/orders/{id}/next-status` |
+| 상품 | `GET/POST /api/products`, `GET/PUT/DELETE /api/products/{id}` |
+| 주문 | `GET/POST /api/orders`, `GET/DELETE /api/orders/{id}` |
+| 주문 상태 | `POST /api/orders/{id}/next-status` |
 | 결제 | `GET /api/payments`, `POST /api/payments/{id}/complete` |
 | 배송 | `GET /api/deliveries`, `POST /api/deliveries/{id}/complete` |
 
-화면(03.frontend)이 이 API를 어떻게 호출하는지는 `03.frontend/README.md`를 참고하세요.
-
-## 컨테이너 이미지 빌드/푸시
 ```bash
-./docker-build.sh   # STUDENT_NUM 환경변수 필요
-./docker-push.sh    # CLASS_NAME, DOCKER_REGISTRY_USER, DOCKER_REGISTRY_PASSWORD 환경변수 필요
+curl -i -X POST http://localhost:8080/api/orders \
+  -H 'Content-Type: application/json' \
+  -d '{"productId":1,"userId":1,"quantity":1,"address":"예시 배송지"}'
 ```
 
-## Kubernetes 배포
-`k8s/` 아래 두 개의 매니페스트를 순서대로 적용합니다.
+예제 데이터의 ID·재고에 따라 응답은 달라집니다. 주문 API의 새 오류 응답은 `ProblemDetail` 형식이며, 다른 리소스의 모든 오류 경로까지 동일하게 정리한 것은 아닙니다.
+
+## 검증
+
 ```bash
-kubectl apply -f k8s/deployment.yaml
+./mvnw --batch-mode test
+```
+
+[OrderWorkflowTests](src/test/java/com/sk/skala/myapp/OrderWorkflowTests.java)는 격리된 메모리 DB와 임시 HTTP 포트를 사용합니다. 주문·결제·배송 저장, 실패 시 롤백, 음수 수량, 금액 초과, 최종 상태, 동시 마지막 재고, HTTP 상태를 검사합니다. 기존 컨텍스트 로딩 테스트도 유지합니다.
+
+## 컨테이너와 Kubernetes
+
+```bash
+STUDENT_NUM=portfolio ./docker-build.sh
+docker run --rm -p 8080:8080 portfolio-webserver:1.0
+```
+
+빌드 스크립트는 Maven 검증 후 현재 플랫폼의 로컬 이미지를 만듭니다. 레지스트리 업로드는 `docker-push.sh`의 필수 환경변수를 별도로 설정한 경우에만 실행합니다.
+
+`k8s/`는 강의 클러스터용 예시입니다. 실제 클러스터에 맞춰 namespace·image·selector를 확인한 뒤 아래 파일을 사용합니다.
+
+```bash
+kubectl apply -f k8s/deploy.yaml
 kubectl apply -f k8s/service.yaml
+kubectl -n class-3 port-forward service/sk090-myfirst-api-server 8080:8080
 ```
-- `deployment.yaml`의 `image` 값을 실제로 push한 이미지 주소로 바꿔야 합니다.
-- Service 이름은 반드시 **`backend`** 여야 합니다. `03.frontend`의 nginx 설정이 `http://backend:8080`으로 프록시하도록 고정되어 있기 때문입니다.
-- Service는 `ClusterIP`이므로 클러스터 밖에서는 직접 접근할 수 없습니다. 외부에서 접근하는 진입점(Ingress)은 `03.frontend`에만 있으며, 03.frontend(nginx)가 이 Service(`backend:8080`)로 API 요청을 전달하는 구조입니다.
-- Liveness/Readiness probe는 Actuator의 `/actuator/health/liveness`, `/actuator/health/readiness`를 사용합니다.
+
+현재 Service 이름은 `sk090-myfirst-api-server`이며 `ClusterIP`입니다. 애플리케이션과 Actuator는 모두 8080을 사용합니다. Kubernetes 배포와 외부 레지스트리 푸시는 이번 로컬 검증 범위에 포함하지 않습니다.
+
+## 한계
+
+학습용 H2·상태 전이 예제입니다. 인증·권한, 실제 결제, 취소·재고 복원 정책, 운영 DB 및 운영 환경 모니터링까지 갖춘 상용 주문 서비스로 소개하지 않습니다. `application-prod.yaml`도 수업용 H2 예제이므로 실제 운영 설정으로 사용하면 안 됩니다.
