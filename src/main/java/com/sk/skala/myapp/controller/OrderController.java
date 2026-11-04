@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.sk.skala.myapp.domain.Order;
 import com.sk.skala.myapp.dto.OrderRequest;
@@ -60,7 +63,7 @@ public class OrderController {
     public OrderResponse getOrderById(@PathVariable Long id) {
         return orderService.getOrderById(id)
                 .map(this::toResponse)
-                .orElse(null);
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."));
     }
 
     // GET /api/orders/user/{userId} — 사용자별 주문 목록 조회
@@ -73,6 +76,7 @@ public class OrderController {
 
     // POST /api/orders — 주문 생성 (사용자가 상품을 선택해 주문)
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse createOrder(@Valid @RequestBody OrderRequest request) {
         Order saved = orderService.createOrder(
                 request.getProductId(),
@@ -93,6 +97,7 @@ public class OrderController {
 
     // DELETE /api/orders/{id} — 주문 삭제
     @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteOrder(@PathVariable Long id) {
         orderService.deleteOrder(id);
     }
